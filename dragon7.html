@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dragon Battle Game with Shop</title>
+  <style>
+    body {
+      background-color: black;
+      margin: 0;
+      overflow: hidden;
+      height: 100vh;
+      position: relative;
+    }
+    #scoreboard {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      font-size: 20px;
+      color: white;
+      background: rgba(0,0,0,0.5);
+      padding: 5px 10px;
+      border-radius: 8px;
+      z-index: 10;
+    }
+    #shop {
+      position: fixed;
+      top: 50px;
+      left: 0;
+      width: 150px;
+      background: rgba(0,0,0,0.7);
+      padding: 10px;
+      box-sizing: border-box;
+      height: calc(100% - 50px);
+      overflow-y: auto;
+      z-index: 10;
+    }
+    #shop h3 {
+      margin-top: 0;
+      color: white;
+    }
+    .upgrade {
+      background: #444;
+      margin: 10px 0;
+      padding: 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      color: white;
+    }
+    #shootButton {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      z-index: 10;
+    }
+    #gun {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60px;
+      z-index: 10;
+    }
+    .dragon {
+      position: absolute;
+      width: 80px;
+    }
+    #dragon1 { top: 100px; left: 100px; }
+    #dragon2 { top: 300px; right: 100px; }
+    .bullet {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background-color: yellow;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 15;
+    }
+  </style>
+</head>
+<body>
+
+<div id="scoreboard">Money: 0</div>
+<div id="shop">
+  <h3>Shop</h3>
+  <div class="upgrade" id="upgrade-fast-shoot">Faster Shooting (-$50)</div>
+  <div class="upgrade" id="upgrade-multishot">More Bullets (-$75)</div>
+  <div class="upgrade" id="upgrade-damage">Increase Damage (-$100)</div>
+</div>
+<button id="shootButton">Shoot!</button>
+<img src="gun.png" id="gun" alt="Gun">
+
+<!-- Dragons -->
+<img id="dragon1" class="dragon" src="dragon.gif" alt="Dragon 1" data-health="3">
+<img id="dragon2" class="dragon" src="dragon.gif" alt="Dragon 2" data-health="3">
+
+<script>
+  const scoreboard = document.getElementById('scoreboard');
+  const shootButton = document.getElementById('shootButton');
+  const gun = document.getElementById('gun');
+  const dragon1 = document.getElementById('dragon1');
+  const dragon2 = document.getElementById('dragon2');
+
+  let money = 0;
+  let damagePerShot = 1;
+  let bulletsPerShot = 1;
+  let shootCooldown = 500; // milliseconds
+  let lastShotTime = 0;
+
+  const dragons = [
+    { element: dragon1, health: 3, speedX: 2, speedY: 2 },
+    { element: dragon2, health: 3, speedX: -2, speedY: 2 }
+  ];
+
+  // Moving dragons
+  function moveDragons() {
+    dragons.forEach(d => {
+      let rect = d.element.getBoundingClientRect();
+      let parentWidth = window.innerWidth;
+      let parentHeight = window.innerHeight;
+      let left = rect.left + d.speedX;
+      let top = rect.top + d.speedY;
+
+      if (left <= 0 || left + rect.width >= parentWidth) d.speedX *= -1;
+      if (top <= 0 || top + rect.height >= parentHeight) d.speedY *= -1;
+
+      d.element.style.left = Math.max(0, Math.min(left, parentWidth - rect.width)) + 'px';
+      d.element.style.top = Math.max(0, Math.min(top, parentHeight - rect.height)) + 'px';
+    });
+    requestAnimationFrame(moveDragons);
+  }
+  moveDragons();
+
+  // Shooting function with upgrade options
+  function shoot() {
+    const now = Date.now();
+    if (now - lastShotTime < shootCooldown) return; // cooldown
+    lastShotTime = now;
+
+    const gunRect = gun.getBoundingClientRect();
+    const startX = gunRect.left + gunRect.width/2;
+
+    for (let i = 0; i < bulletsPerShot; i++) {
+      const bullet = document.createElement('div');
+      bullet.className = 'bullet';
+
+      // Slight spread for multishot
+      let offsetX = (i - (bulletsPerShot - 1)/2) * 5; 
+      bullet.style.left = (startX + offsetX - 5) + 'px';
+      bullet.style.top = (gunRect.top - 10) + 'px';
+      document.body.appendChild(bullet);
+
+      const speed = 15;
+      function animate() {
+        const rect = bullet.getBoundingClientRect();
+        if (rect.top <= 0 || rect.bottom >= window.innerHeight || rect.left <= 0 || rect.right >= window.innerWidth) {
+          bullet.remove();
+          return;
+        }
+        bullet.style.top = rect.top - speed + 'px';
+
+        // Check collision with dragons
+        dragons.forEach(d => {
+          if (d.health > 0 && isCollision(bullet, d.element)) {
+            // Damage dragon
+            d.health -= damagePerShot;
+            flashRed(d.element);
+            if (d.health <= 0) {
+              d.element.style.display = 'none';
+              setTimeout(() => {
+                d.element.style.display = 'block';
+                d.health = 3; // reset health
+              }, 3000);
+            }
+            // earn money
+            money += 10;
+            updateScore();
+            bullet.remove();
+          }
+        });
+
+        if (document.body.contains(bullet))
+          requestAnimationFrame(animate);
+      }
+      animate();
+    }
+  }
+
+  function updateScore() {
+    scoreboard.textContent = 'Money: ' + money;
+  }
+
+  // Flash red when hit
+  function flashRed(target) {
+    target.style.border = '3px solid red';
+    setTimeout(() => {
+      target.style.border = '';
+    }, 200);
+  }
+
+  function isCollision(bullet, target) {
+    const bRect = bullet.getBoundingClientRect();
+    const tRect = target.getBoundingClientRect();
+    return (
+      bRect.left < tRect.right &&
+      bRect.right > tRect.left &&
+      bRect.top < tRect.bottom &&
+      bRect.bottom > tRect.top
+    );
+  }
+
+  // Upgrade buttons
+document.getElementById('upgrade-fast-shoot').onclick = () => {
+  if (money >= 50) {
+    money -= 50;
+    shootCooldown = Math.max(100, shootCooldown - 100); // faster
+    updateScore();
+  }
+};
+document.getElementById('upgrade-multishot').onclick = () => {
+  if (money >= 75) {
+    money -= 75;
+    bulletsPerShot += 1; // more bullets at once
+    updateScore();
+  }
+};
+document.getElementById('upgrade-damage').onclick = () => {
+  if (money >= 100) {
+    money -= 100;
+    damagePerShot += 1; // more damage
+    updateScore();
+  }
+};
+
+// Shooting event
+document.getElementById('shootButton').onclick = () => {
+  shoot();
+};
+</script>
+</body>
+</html>
